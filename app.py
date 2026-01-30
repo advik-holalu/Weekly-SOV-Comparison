@@ -98,18 +98,26 @@ if month:
     df_f = df_f[df_f["Month"].isin(month)]
 
 # =====================================================
-# BRAND (SESSION SAFE)
+# BRAND (SESSION SAFE - NO BOUNCE)
 # =====================================================
 brands_available = sorted(df_f["Brand"].unique())
-default = [GO_DESI] if GO_DESI in brands_available else brands_available[:1]
 
+# Initialize once
 if "brands" not in st.session_state:
-    st.session_state.brands = default
+    if GO_DESI in brands_available:
+        st.session_state.brands = [GO_DESI]
+    else:
+        st.session_state.brands = brands_available[:1]
 
+# Remove selections that disappeared due to filters
 st.session_state.brands = [b for b in st.session_state.brands if b in brands_available]
 
-brands = st.sidebar.multiselect("Brand", brands_available, default=st.session_state.brands)
-st.session_state.brands = brands
+# Widget (state-controlled)
+brands = st.sidebar.multiselect(
+    "Brand",
+    brands_available,
+    key="brands"
+)
 
 df_plot = df_f[df_f["Brand"].isin(brands)]
 
