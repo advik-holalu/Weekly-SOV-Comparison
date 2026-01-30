@@ -65,19 +65,35 @@ st.sidebar.header("Filters")
 
 df_f = df.copy()
 
-platform = st.sidebar.multiselect("Platform", sorted(df["Platform"].unique()))
+platform_opts = sorted(df["Platform"].unique())
+platform = st.sidebar.multiselect(
+    "Platform",
+    platform_opts,
+    default=["Zepto"] if "Zepto" in platform_opts else []
+)
 if platform:
     df_f = df_f[df_f["Platform"].isin(platform)]
 
-category = st.sidebar.multiselect("Category", sorted(df_f["Category"].unique()))
+cat_opts = sorted(df_f["Category"].unique())
+category = st.sidebar.multiselect(
+    "Category",
+    cat_opts,
+    default=["Indian Sweets"] if "Indian Sweets" in cat_opts else []
+)
 if category:
     df_f = df_f[df_f["Category"].isin(category)]
 
-city = st.sidebar.multiselect("City", sorted(df_f["City"].unique()))
+city_opts = sorted(df_f["City"].unique())
+city = st.sidebar.multiselect(
+    "City",
+    city_opts,
+    default=["Bangalore"] if "Bangalore" in city_opts else []
+)
 if city:
     df_f = df_f[df_f["City"].isin(city)]
 
-month = st.sidebar.multiselect("Month", sorted(df_f["Month"].unique()))
+month_opts = sorted(df_f["Month"].unique())
+month = st.sidebar.multiselect("Month", month_opts, default=month_opts)
 if month:
     df_f = df_f[df_f["Month"].isin(month)]
 
@@ -102,8 +118,19 @@ df_plot = df_f[df_f["Brand"].isin(brands)]
 # =====================================================
 st.sidebar.markdown("---")
 
-m1 = st.sidebar.selectbox("Compare Metric (Solid)", list(METRICS.keys()), index=2)
-m2 = st.sidebar.selectbox("Baseline Metric (Dashed)", [m for m in METRICS if m != m1])
+metric_keys = list(METRICS.keys())
+
+m1 = st.sidebar.selectbox(
+    "Compare Metric (Solid)",
+    metric_keys,
+    index=metric_keys.index("Est. Category Share")
+)
+
+m2 = st.sidebar.selectbox(
+    "Baseline Metric (Dashed)",
+    [m for m in metric_keys if m != m1],
+    index=0 if m1 != "Overall SOV" else 1
+)
 
 col1 = METRICS[m1]
 col2 = METRICS[m2]
