@@ -84,16 +84,35 @@ if category:
     df_f = df_f[df_f["Category"].isin(category)]
 
 city_opts = sorted(df_f["City"].unique())
+
+default_city = ["PAN India"] if "PAN India" in city_opts else (
+    ["Bangalore"] if "Bangalore" in city_opts else city_opts[:1]
+)
+
 city = st.sidebar.multiselect(
     "City",
     city_opts,
-    default=["Bangalore"] if "Bangalore" in city_opts else []
+    default=default_city
 )
+
 if city:
     df_f = df_f[df_f["City"].isin(city)]
 
 month_opts = sorted(df_f["Month"].unique())
-month = st.sidebar.multiselect("Month", month_opts, default=month_opts)
+
+preferred_months = ["Apr", "May", "Jun"]
+default_months = [m for m in preferred_months if m in month_opts]
+
+# fallback if Apr/May/Jun not present
+if not default_months:
+    default_months = month_opts
+
+month = st.sidebar.multiselect(
+    "Month",
+    month_opts,
+    default=default_months
+)
+
 if month:
     df_f = df_f[df_f["Month"].isin(month)]
 
@@ -134,10 +153,15 @@ m1 = st.sidebar.selectbox(
     index=metric_keys.index("Est. Category Share")
 )
 
+m2_options = [m for m in metric_keys if m != m1]
+
+# Default dashed = Overall SOV (if available)
+default_m2 = "Overall SOV" if "Overall SOV" in m2_options else m2_options[0]
+
 m2 = st.sidebar.selectbox(
     "Baseline Metric (Dashed)",
-    [m for m in metric_keys if m != m1],
-    index=0 if m1 != "Overall SOV" else 1
+    m2_options,
+    index=m2_options.index(default_m2)
 )
 
 col1 = METRICS[m1]

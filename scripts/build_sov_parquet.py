@@ -15,7 +15,9 @@ FILES = {
     "Zepto": RAW / "zepto.xlsx",
 }
 
-# Columns we actually need
+# =====================================================
+# REQUIRED COLUMNS (NEW SCHEMA)
+# =====================================================
 KEEP_COLS = [
     "Date",
     "Week",
@@ -30,6 +32,16 @@ KEEP_COLS = [
     "Ad SOV",
 ]
 
+NUMERIC_COLS = [
+    "Est. Category Share",
+    "Est. Category Share SP",
+    "Overall SOV",
+    "Organic SOV",
+    "Ad SOV",
+]
+
+DIM_COLS = ["Week", "Month", "Category", "City", "Brand"]
+
 # =====================================================
 # LOAD + TAG PLATFORM
 # =====================================================
@@ -38,23 +50,30 @@ dfs = []
 for platform, path in FILES.items():
     print(f"Loading {platform} → {path.name}")
 
-    df = pd.read_excel(path, sheet_name="Sheet1", engine="openpyxl")
-    df.columns = df.columns.str.strip()
+    if not path.exists():
+        raise FileNotFoundError(f"Missing file: {path}")
+
+    df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+    df.columns = df.columns.astype(str).str.strip()
+
+    # Validate schema
+    missing = [c for c in KEEP_COLS if c not in df.columns]
+    if missing:
+        raise ValueError(f"{platform} missing columns: {missing}")
+
+    # Keep only required columns
+    df = df[KEEP_COLS].copy()
 
     # Platform column
     df["Platform"] = platform
 
-    # Keep only required columns
-    df = df[[*KEEP_COLS, "Platform"]]
-
     # Types
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-    for c in KEEP_COLS:
-        if c not in ["Date", "Week", "Month", "Category", "City", "Brand"]:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+    for c in NUMERIC_COLS:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    for c in ["Week", "Month", "Category", "City", "Brand", "Platform"]:
+    for c in DIM_COLS + ["Platform"]:
         df[c] = df[c].astype(str).str.strip()
 
     dfs.append(df)
@@ -64,13 +83,13 @@ for platform, path in FILES.items():
 # =====================================================
 full = pd.concat(dfs, ignore_index=True)
 
-# Drop junk rows
+# Drop unusable rows
 full = full.dropna(subset=["Date", "Week", "Brand", "City", "Category"])
 
 # =====================================================
-# AGGREGATE TO WEEKLY BRAND LEVEL
+# WEEKLY BRAND AGGREGATION
 # =====================================================
-print("Aggregating...")
+print("Aggregating weekly brand metrics...")
 
 agg = (
     full.groupby(
@@ -79,6 +98,9 @@ agg = (
     )
     .mean(numeric_only=True)
 )
+
+# Sort for deterministic output
+agg = agg.sort_values(["Platform", "Category", "City", "Brand", "Date"])
 
 # =====================================================
 # WRITE PARQUET
