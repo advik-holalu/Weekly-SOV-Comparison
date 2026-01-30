@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# Mac
+.DS_Store
+
+# Virtual env
+.venv/
+env/
+
+# Streamlit cache
+.streamlit/
+
+# Raw input files (never push)
+data_raw/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
