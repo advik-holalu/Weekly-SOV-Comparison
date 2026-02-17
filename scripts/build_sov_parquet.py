@@ -22,6 +22,7 @@ KEEP_COLS = [
     "Date",
     "Week",
     "Month",
+    "Year",
     "Category",
     "City",
     "Brand",
@@ -40,7 +41,7 @@ NUMERIC_COLS = [
     "Ad SOV",
 ]
 
-DIM_COLS = ["Week", "Month", "Category", "City", "Brand"]
+DIM_COLS = ["Week", "Month", "Year", "Category", "City", "Brand"]
 
 # =====================================================
 # LOAD + TAG PLATFORM
@@ -69,6 +70,7 @@ for platform, path in FILES.items():
 
     # Types
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
 
     for c in NUMERIC_COLS:
         df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -93,7 +95,7 @@ print("Aggregating weekly brand metrics...")
 
 agg = (
     full.groupby(
-        ["Date", "Week", "Month", "Platform", "Category", "City", "Brand"],
+        ["Date", "Week", "Month", "Year", "Platform", "Category", "City", "Brand"],
         as_index=False
     )
     .mean(numeric_only=True)
@@ -105,11 +107,36 @@ agg = agg.sort_values(["Platform", "Category", "City", "Brand", "Date"])
 # =====================================================
 # WRITE PARQUET
 # =====================================================
+# =====================================================
+# DIAGNOSTICS
+# =====================================================
+print("\n================ YEAR / MONTH DIAGNOSTIC ================\n")
+
+year_month_summary = (
+    agg.groupby(["Year", "Month"])
+       .size()
+       .reset_index(name="Rows")
+       .sort_values(["Year", "Month"])
+)
+
+for year in sorted(year_month_summary["Year"].unique()):
+    print(f"\nYear: {int(year)}")
+
+    year_df = year_month_summary[year_month_summary["Year"] == year]
+
+    for _, row in year_df.iterrows():
+        print(f"   {row['Month']} → {row['Rows']} rows")
+
+print("\n=========================================================\n")
+
+
+# =====================================================
+# WRITE PARQUET
+# =====================================================
 OUT.parent.mkdir(exist_ok=True)
 
 agg.to_parquet(OUT, index=False)
 
-print("=================================================")
-print(f"Saved → {OUT}")
-print(f"Rows: {len(agg):,}")
+print("Saved →", OUT)
+print("Total Rows:", len(agg))
 print("Done.")

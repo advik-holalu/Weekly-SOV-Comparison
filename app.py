@@ -19,6 +19,7 @@ GO_DESI_COLOR = "#F05A28"
 def load_data():
     df = pd.read_parquet(DATA)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
 
     for c in ["Week", "Month", "Category", "City", "Brand", "Platform"]:
         df[c] = df[c].astype(str).str.strip()
@@ -65,56 +66,157 @@ st.sidebar.header("Filters")
 
 df_f = df.copy()
 
+# =====================================================
+# FINANCIAL YEAR LOGIC (APR–MAR)
+# =====================================================
+
+month_order = {
+    "Jan": 1, "Feb": 2, "Mar": 3,
+    "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9,
+    "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
+df_f["MonthNum"] = df_f["Month"].map(month_order)
+
+# Financial Year
+df_f["FY"] = df_f.apply(
+    lambda x: x["Year"] if x["MonthNum"] >= 4 else x["Year"] - 1,
+    axis=1
+)
+
+# Financial Quarter
+def get_fy_quarter(m):
+    if m in [4,5,6]:
+        return "Q1"
+    elif m in [7,8,9]:
+        return "Q2"
+    elif m in [10,11,12]:
+        return "Q3"
+    else:
+        return "Q4"
+
+df_f["Quarter"] = df_f["MonthNum"].apply(get_fy_quarter)
+
+df_f["FYQuarter"] = df_f["FY"].astype(str) + " - " + df_f["Quarter"]
+
+# =====================================================
+# PLATFORM
+# =====================================================
 platform_opts = sorted(df["Platform"].unique())
-platform = st.sidebar.multiselect(
+
+platform_display = ["Select All"] + platform_opts
+
+selected_platform = st.sidebar.multiselect(
     "Platform",
-    platform_opts,
-    default=["Zepto"] if "Zepto" in platform_opts else []
+    platform_display,
+    default=["Zepto"] if "Zepto" in platform_opts else ["Select All"]
 )
-if platform:
-    df_f = df_f[df_f["Platform"].isin(platform)]
 
+if "Select All" in selected_platform:
+    platform = platform_opts
+else:
+    platform = selected_platform
+
+df_f = df_f[df_f["Platform"].isin(platform)]
+
+
+# =====================================================
+# CATEGORY
+# =====================================================
 cat_opts = sorted(df_f["Category"].unique())
-category = st.sidebar.multiselect(
-    "Category",
-    cat_opts,
-    default=["Indian Sweets"] if "Indian Sweets" in cat_opts else []
-)
-if category:
-    df_f = df_f[df_f["Category"].isin(category)]
 
+cat_display = ["Select All"] + cat_opts
+
+selected_category = st.sidebar.multiselect(
+    "Category",
+    cat_display,
+    default=["Indian Sweets"] if "Indian Sweets" in cat_opts else ["Select All"]
+)
+
+if "Select All" in selected_category:
+    category = cat_opts
+else:
+    category = selected_category
+
+df_f = df_f[df_f["Category"].isin(category)]
+
+
+# =====================================================
+# CITY
+# =====================================================
 city_opts = sorted(df_f["City"].unique())
 
-default_city = ["PAN India"] if "PAN India" in city_opts else (
-    ["Bangalore"] if "Bangalore" in city_opts else city_opts[:1]
+city_display = ["Select All"] + city_opts
+
+default_city = (
+    ["PAN India"] if "PAN India" in city_opts
+    else ["Bangalore"] if "Bangalore" in city_opts
+    else ["Select All"]
 )
 
-city = st.sidebar.multiselect(
+selected_city = st.sidebar.multiselect(
     "City",
-    city_opts,
+    city_display,
     default=default_city
 )
 
-if city:
-    df_f = df_f[df_f["City"].isin(city)]
+if "Select All" in selected_city:
+    city = city_opts
+else:
+    city = selected_city
 
-month_opts = sorted(df_f["Month"].unique())
+df_f = df_f[df_f["City"].isin(city)]
 
-preferred_months = ["Apr", "May", "Jun"]
-default_months = [m for m in preferred_months if m in month_opts]
+# =====================================================
+# QUARTER FILTER (DEFAULT = ALL)
+# =====================================================
 
-# fallback if Apr/May/Jun not present
-if not default_months:
-    default_months = month_opts
+quarter_opts = (
+    df_f[["FYQuarter", "Date"]]
+    .drop_duplicates()
+    .sort_values("Date")
+)["FYQuarter"].unique().tolist()
 
-month = st.sidebar.multiselect(
-    "Month",
-    month_opts,
-    default=default_months
+quarter_display = ["Select All"] + quarter_opts
+
+selected_quarters = st.sidebar.multiselect(
+    "Quarter (Financial Year)",
+    quarter_display,
+    default=["Select All"]
 )
 
-if month:
-    df_f = df_f[df_f["Month"].isin(month)]
+if "Select All" in selected_quarters:
+    quarters = quarter_opts
+else:
+    quarters = selected_quarters
+
+df_f = df_f[df_f["FYQuarter"].isin(quarters)]
+
+# =====================================================
+# MONTH FILTER (DEFAULT = ALL)
+# =====================================================
+
+month_opts = (
+    df_f[["Month", "MonthNum"]]
+    .drop_duplicates()
+    .sort_values("MonthNum")
+)["Month"].tolist()
+
+month_display = ["Select All"] + month_opts
+
+selected_months = st.sidebar.multiselect(
+    "Month",
+    month_display,
+    default=["Select All"]
+)
+
+if "Select All" in selected_months:
+    months = month_opts
+else:
+    months = selected_months
+
+df_f = df_f[df_f["Month"].isin(months)]
 
 # =====================================================
 # BRAND (SESSION SAFE - NO BOUNCE)
@@ -183,7 +285,20 @@ if df_plot.empty:
     st.stop()
 
 df_plot = df_plot.sort_values("Date")
-x_order = df_plot[["Week", "Date"]].drop_duplicates().sort_values("Date")["Week"]
+# Make Week Year-aware to avoid collisions
+df_plot["WeekLabel"] = (
+    df_plot["Year"].astype(int).astype(str)
+    + " - "
+    + df_plot["Week"]
+)
+
+week_order_df = (
+    df_plot[["WeekLabel", "Date"]]
+    .drop_duplicates()
+    .sort_values("Date")
+)
+
+x_order = week_order_df["WeekLabel"].tolist()
 
 colors = build_color_map(sorted(df_plot["Brand"].unique()))
 
@@ -193,7 +308,7 @@ for b in sorted(df_plot["Brand"].unique()):
     d = df_plot[df_plot["Brand"] == b]
 
     fig.add_trace(go.Scatter(
-        x=d["Week"],
+        x=d["WeekLabel"],
         y=d[col1],
         mode="lines+markers+text",
         text=[f"{v:.1f}%" for v in d[col1]],
@@ -203,7 +318,7 @@ for b in sorted(df_plot["Brand"].unique()):
     ))
 
     fig.add_trace(go.Scatter(
-        x=d["Week"],
+        x=d["WeekLabel"],
         y=d[col2],
         mode="lines+markers+text",
         text=[f"{v:.1f}%" for v in d[col2]],
