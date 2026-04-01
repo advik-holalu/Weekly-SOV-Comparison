@@ -349,7 +349,7 @@ with tab1:
 with tab2:
     st.title("Blinkit Volume Share")
 
-    df = load_blinkit().copy()   # independent from global filters
+    df = load_blinkit().copy()
 
     # =========================
     # FILTERS
@@ -358,9 +358,7 @@ with tab2:
 
     col1, col2 = st.columns(2)
 
-    # -------------------------
-    # CATEGORY (default fixed)
-    # -------------------------
+    # CATEGORY
     with col1:
         category = st.multiselect(
             "Category",
@@ -368,9 +366,7 @@ with tab2:
             default=["Indian Sweets"]
         )
 
-    # -------------------------
-    # KEYWORD TYPE (All logic)
-    # -------------------------
+    # KEYWORD TYPE
     with col2:
         keyword_type_opts = sorted(df["Keyword Type"].unique())
         keyword_type_display = ["All"] + keyword_type_opts
@@ -391,9 +387,7 @@ with tab2:
 
     col3, col4 = st.columns(2)
 
-    # -------------------------
-    # KEYWORD (default GO DESi)
-    # -------------------------
+    # KEYWORD
     with col3:
         keyword_opts = sorted(df["Keyword"].unique())
 
@@ -403,9 +397,7 @@ with tab2:
             default=["GO DESi"] if "GO DESi" in keyword_opts else keyword_opts[:1]
         )
 
-    # -------------------------
-    # WEEK (All logic)
-    # -------------------------
+    # WEEK
     with col4:
         week_cols = [c for c in df.columns if "W" in c]
         week_display = ["All"] + week_cols
@@ -431,6 +423,14 @@ with tab2:
         value_name="Searches"
     )
 
+    # ---- CLEAN NUMBERS (IMPORTANT FIX) ----
+    df_melt["Searches"] = (
+        df_melt["Searches"]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .replace("-", None)
+    )
+
     df_melt["Searches"] = pd.to_numeric(df_melt["Searches"], errors="coerce")
 
     # =========================
@@ -438,11 +438,23 @@ with tab2:
     # =========================
     def week_sort(w):
         try:
-            year = int("20" + w[:2])
-            week = int(w.split("W")[1])
-            return (year, week)
+            parts = w.split()
+            month_year = parts[0]
+            week = int(parts[1].replace("W", ""))
+
+            month_map = {
+                "Jan": 1, "Feb": 2, "Mar": 3,
+                "Apr": 4, "May": 5, "Jun": 6,
+                "Jul": 7, "Aug": 8, "Sep": 9,
+                "Oct": 10, "Nov": 11, "Dec": 12
+            }
+
+            month = month_map[month_year[:3]]
+            year = int("20" + month_year[3:])
+
+            return (year, month, week)
         except:
-            return (0, 0)
+            return (0, 0, 0)
 
     df_melt["sort_key"] = df_melt["Week"].apply(week_sort)
     df_melt = df_melt.sort_values("sort_key")
@@ -453,22 +465,32 @@ with tab2:
     fig = go.Figure()
 
     for k in keywords:
-        d = df_melt[df_melt["Keyword"] == k]
+        d = df_melt[df_melt["Keyword"] == k].copy()
+
+        # drop missing values only (after fixing parsing)
+        d = d.dropna(subset=["Searches"])
 
         fig.add_trace(go.Scatter(
             x=d["Week"],
             y=d["Searches"],
             mode="lines+markers+text",
-            text=[f"{int(v):,}" for v in d["Searches"]],
+            text=[
+                f"{int(v):,}" if pd.notna(v) else ""
+                for v in d["Searches"]
+            ],
             textposition="top center",
             name=k,
             line=dict(width=3)
         ))
 
+    # enforce correct x order
+    x_order = df_melt["Week"].drop_duplicates().tolist()
+
     fig.update_layout(
         height=600,
         yaxis_title="Search Volume",
         xaxis_title="Week",
+        xaxis=dict(categoryorder="array", categoryarray=x_order),
         legend=dict(orientation="h", y=-0.2),
     )
 
