@@ -118,6 +118,32 @@ with tab1:
     df_f["FYQuarter"] = df_f["FY"].astype(str) + " - " + df_f["Quarter"]
 
     # =====================================================
+    # FINANCIAL YEAR FILTER (MULTI + SELECT ALL)
+    # =====================================================
+    fy_opts = sorted(df_f["FY"].dropna().unique())
+
+    # Display labels → FY25, FY26
+    fy_display = [f"FY{str(int(y))[-2:]}" for y in fy_opts]
+
+    # Map display → actual FY value
+    fy_map = dict(zip(fy_display, fy_opts))
+
+    fy_display_with_all = ["Select All"] + fy_display
+
+    selected_fy_display = st.sidebar.multiselect(
+        "Financial Year",
+        fy_display_with_all,
+        default=["Select All"]
+    )
+
+    if "Select All" in selected_fy_display:
+        selected_fy = fy_opts
+    else:
+        selected_fy = [fy_map[x] for x in selected_fy_display]
+
+    df_f = df_f[df_f["FY"].isin(selected_fy)]
+
+    # =====================================================
     # PLATFORM
     # =====================================================
     platform_opts = sorted(df["Platform"].unique())
