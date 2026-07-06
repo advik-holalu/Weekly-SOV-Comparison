@@ -110,24 +110,35 @@ agg = agg.sort_values(["Platform", "Category", "City", "Brand", "Date"])
 # =====================================================
 # DIAGNOSTICS
 # =====================================================
+MONTH_ORDER = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
 print("\n================ YEAR / MONTH DIAGNOSTIC ================\n")
+
+# Years present (Year is stored as a string in the parquet)
+years_present = sorted(agg["Year"].dropna().unique(), key=lambda y: int(y))
+print(f"Years in parquet: {[int(y) for y in years_present]}\n")
 
 year_month_summary = (
     agg.groupby(["Year", "Month"])
        .size()
        .reset_index(name="Rows")
-       .sort_values(["Year", "Month"])
 )
+year_month_summary["MonthNum"] = year_month_summary["Month"].map(MONTH_ORDER)
+year_month_summary = year_month_summary.sort_values(["Year", "MonthNum"])
 
-for year in sorted(year_month_summary["Year"].unique()):
-    print(f"\nYear: {int(year)}")
-
+for year in years_present:
     year_df = year_month_summary[year_month_summary["Year"] == year]
+    months = year_df["Month"].tolist()
+    print(f"Year: {int(year)}  ({len(months)} months: {', '.join(months)})")
 
     for _, row in year_df.iterrows():
-        print(f"   {row['Month']} → {row['Rows']} rows")
+        print(f"   {row['Month']:<4} → {row['Rows']:>7,} rows")
+    print()
 
-print("\n=========================================================\n")
+print("=========================================================\n")
 
 
 # =====================================================
