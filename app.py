@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
@@ -23,6 +24,49 @@ def load_data():
 
     for c in ["Week", "Month", "Category", "City", "Brand", "Platform"]:
         df[c] = df[c].astype(str).str.strip()
+
+    # =====================================================
+    # DERIVED COLUMNS (computed once here, then cached)
+    # Moved out of the tab1 rerun path to avoid recomputing
+    # over the full frame on every filter change.
+    # =====================================================
+    month_order = {
+        "Jan": 1, "Feb": 2, "Mar": 3,
+        "Apr": 4, "May": 5, "Jun": 6,
+        "Jul": 7, "Aug": 8, "Sep": 9,
+        "Oct": 10, "Nov": 11, "Dec": 12,
+    }
+
+    df["MonthNum"] = df["Month"].map(month_order)
+
+    # Financial Year (Apr–Mar) — vectorized replacement for row-wise apply
+    df["FY"] = df["Year"].where(df["MonthNum"] >= 4, df["Year"] - 1)
+
+    # Financial Quarter — vectorized replacement for row-wise apply
+    # Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
+    df["Quarter"] = np.select(
+        [
+            df["MonthNum"].isin([4, 5, 6]),
+            df["MonthNum"].isin([7, 8, 9]),
+            df["MonthNum"].isin([10, 11, 12]),
+        ],
+        ["Q1", "Q2", "Q3"],
+        default="Q4",
+    )
+
+    df["FYQuarter"] = df["FY"].astype(str) + " - " + df["Quarter"]
+
+    # =====================================================
+    # DTYPE DOWNCAST (memory only — no change to values,
+    # sort order, or filter option lists).
+    # Week is intentionally left as string: it is used in
+    # string concatenation for WeekLabel, which category
+    # dtype would break.
+    # =====================================================
+    df["Year"] = df["Year"].astype("Int64")
+
+    for c in ["Platform", "Category", "City", "Brand", "Month"]:
+        df[c] = df[c].astype("category")
 
     return df
 
@@ -81,41 +125,9 @@ with tab1:
     # =====================================================
     st.sidebar.header("Filters")
 
+    # df_f carries the derived columns (MonthNum, FY, Quarter,
+    # FYQuarter) from the cached load_data() — no recompute here.
     df_f = df.copy()
-
-    # =====================================================
-    # FINANCIAL YEAR LOGIC (APR–MAR)
-    # =====================================================
-
-    month_order = {
-        "Jan": 1, "Feb": 2, "Mar": 3,
-        "Apr": 4, "May": 5, "Jun": 6,
-        "Jul": 7, "Aug": 8, "Sep": 9,
-        "Oct": 10, "Nov": 11, "Dec": 12,
-    }
-
-    df_f["MonthNum"] = df_f["Month"].map(month_order)
-
-    # Financial Year
-    df_f["FY"] = df_f.apply(
-        lambda x: x["Year"] if x["MonthNum"] >= 4 else x["Year"] - 1,
-        axis=1
-    )
-
-    # Financial Quarter
-    def get_fy_quarter(m):
-        if m in [4,5,6]:
-            return "Q1"
-        elif m in [7,8,9]:
-            return "Q2"
-        elif m in [10,11,12]:
-            return "Q3"
-        else:
-            return "Q4"
-
-    df_f["Quarter"] = df_f["MonthNum"].apply(get_fy_quarter)
-
-    df_f["FYQuarter"] = df_f["FY"].astype(str) + " - " + df_f["Quarter"]
 
     # =====================================================
     # FINANCIAL YEAR FILTER (MULTI + SELECT ALL)
