@@ -5,7 +5,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 
-st.set_page_config(page_title="Weekly SOV Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Weekly SOV Dashboard",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data_agg" / "sov_weekly.parquet"
@@ -110,215 +114,227 @@ def build_color_map(brands):
 
 
 # =====================================================
+# BLINKIT BRANDED ROLLUPS
+# Pre-summed total rows in BlinkitVS.xlsx — excluded from the
+# normal per-keyword filters/chart so they don't pollute controls.
+# =====================================================
+BLINKIT_ROLLUPS = [
+    "GO DESi Candies/POPz Branded Keywords",
+    "GO DESi Sweets Branded Keywords",
+    "GO DESi Snacks Branded Keywords",
+    "GO DESi",
+]
+BLINKIT_ROLLUP_NAMES_LOWER = {r.strip().lower() for r in BLINKIT_ROLLUPS}
+
+
+# =====================================================
 # TABS
+# Blinkit is listed first so it is the default-open tab.
 # =====================================================
-tab1, tab2 = st.tabs(["SOV vs Market Share", "Blinkit Volume Share"])
+tab_blinkit, tab_sov = st.tabs(["Blinkit Volume Share", "SOV vs Market Share"])
 
 
 # =====================================================
-# ====================== TAB 1 =========================
+# ====================== SOV TAB =======================
 # =====================================================
-with tab1:
+with tab_sov:
 
     # =====================================================
-    # SIDEBAR FILTERS
+    # FILTERS (inline — moved out of the global sidebar so they do
+    # not bleed across tabs). Widget logic, order of application,
+    # defaults, keys, and cascading option-narrowing are unchanged;
+    # only the container (sidebar -> tab body) and layout differ.
     # =====================================================
-    st.sidebar.header("Filters")
+    with st.expander("Filters", expanded=True):
 
-    # df_f carries the derived columns (MonthNum, FY, Quarter,
-    # FYQuarter) from the cached load_data() — no recompute here.
-    df_f = df.copy()
+        # df_f carries the derived columns (MonthNum, FY, Quarter,
+        # FYQuarter) from the cached load_data() — no recompute here.
+        df_f = df.copy()
 
-    # =====================================================
-    # FINANCIAL YEAR FILTER (MULTI + SELECT ALL)
-    # =====================================================
-    fy_opts = sorted(df_f["FY"].dropna().unique())
+        frow1_c1, frow1_c2, frow1_c3 = st.columns(3)
 
-    # Display labels → FY25, FY26
-    fy_display = [f"FY{str(int(y))[-2:]}" for y in fy_opts]
+        # ---- FINANCIAL YEAR (MULTI + SELECT ALL) ----
+        with frow1_c1:
+            fy_opts = sorted(df_f["FY"].dropna().unique())
 
-    # Map display → actual FY value
-    fy_map = dict(zip(fy_display, fy_opts))
+            # Display labels → FY25, FY26
+            fy_display = [f"FY{str(int(y))[-2:]}" for y in fy_opts]
 
-    fy_display_with_all = ["Select All"] + fy_display
+            # Map display → actual FY value
+            fy_map = dict(zip(fy_display, fy_opts))
 
-    selected_fy_display = st.sidebar.multiselect(
-        "Financial Year",
-        fy_display_with_all,
-        default=["Select All"]
-    )
+            fy_display_with_all = ["Select All"] + fy_display
 
-    if "Select All" in selected_fy_display:
-        selected_fy = fy_opts
-    else:
-        selected_fy = [fy_map[x] for x in selected_fy_display]
+            selected_fy_display = st.multiselect(
+                "Financial Year",
+                fy_display_with_all,
+                default=["Select All"]
+            )
 
-    df_f = df_f[df_f["FY"].isin(selected_fy)]
+            if "Select All" in selected_fy_display:
+                selected_fy = fy_opts
+            else:
+                selected_fy = [fy_map[x] for x in selected_fy_display]
 
-    # =====================================================
-    # PLATFORM
-    # =====================================================
-    platform_opts = sorted(df["Platform"].unique())
+        df_f = df_f[df_f["FY"].isin(selected_fy)]
 
-    platform_display = ["Select All"] + platform_opts
+        # ---- PLATFORM ----
+        with frow1_c2:
+            platform_opts = sorted(df["Platform"].unique())
 
-    selected_platform = st.sidebar.multiselect(
-        "Platform",
-        platform_display,
-        default=["Zepto"] if "Zepto" in platform_opts else ["Select All"]
-    )
+            platform_display = ["Select All"] + platform_opts
 
-    if "Select All" in selected_platform:
-        platform = platform_opts
-    else:
-        platform = selected_platform
+            selected_platform = st.multiselect(
+                "Platform",
+                platform_display,
+                default=["Zepto"] if "Zepto" in platform_opts else ["Select All"]
+            )
 
-    df_f = df_f[df_f["Platform"].isin(platform)]
+            if "Select All" in selected_platform:
+                platform = platform_opts
+            else:
+                platform = selected_platform
 
+        df_f = df_f[df_f["Platform"].isin(platform)]
 
-    # =====================================================
-    # CATEGORY
-    # =====================================================
-    cat_opts = sorted(df_f["Category"].unique())
+        # ---- CATEGORY ----
+        with frow1_c3:
+            cat_opts = sorted(df_f["Category"].unique())
 
-    cat_display = ["Select All"] + cat_opts
+            cat_display = ["Select All"] + cat_opts
 
-    selected_category = st.sidebar.multiselect(
-        "Category",
-        cat_display,
-        default=["Indian Sweets"] if "Indian Sweets" in cat_opts else ["Select All"]
-    )
+            selected_category = st.multiselect(
+                "Category",
+                cat_display,
+                default=["Indian Sweets"] if "Indian Sweets" in cat_opts else ["Select All"]
+            )
 
-    if "Select All" in selected_category:
-        category = cat_opts
-    else:
-        category = selected_category
+            if "Select All" in selected_category:
+                category = cat_opts
+            else:
+                category = selected_category
 
-    df_f = df_f[df_f["Category"].isin(category)]
+        df_f = df_f[df_f["Category"].isin(category)]
 
+        frow2_c1, frow2_c2, frow2_c3 = st.columns(3)
 
-    # =====================================================
-    # CITY
-    # =====================================================
-    city_opts = sorted(df_f["City"].unique())
+        # ---- CITY ----
+        with frow2_c1:
+            city_opts = sorted(df_f["City"].unique())
 
-    city_display = ["Select All"] + city_opts
+            city_display = ["Select All"] + city_opts
 
-    default_city = (
-        ["PAN India"] if "PAN India" in city_opts
-        else ["Bangalore"] if "Bangalore" in city_opts
-        else ["Select All"]
-    )
+            default_city = (
+                ["PAN India"] if "PAN India" in city_opts
+                else ["Bangalore"] if "Bangalore" in city_opts
+                else ["Select All"]
+            )
 
-    selected_city = st.sidebar.multiselect(
-        "City",
-        city_display,
-        default=default_city
-    )
+            selected_city = st.multiselect(
+                "City",
+                city_display,
+                default=default_city
+            )
 
-    if "Select All" in selected_city:
-        city = city_opts
-    else:
-        city = selected_city
+            if "Select All" in selected_city:
+                city = city_opts
+            else:
+                city = selected_city
 
-    df_f = df_f[df_f["City"].isin(city)]
+        df_f = df_f[df_f["City"].isin(city)]
 
-    # =====================================================
-    # QUARTER FILTER (DEFAULT = ALL)
-    # =====================================================
+        # ---- QUARTER (DEFAULT = ALL) ----
+        with frow2_c2:
+            quarter_opts = (
+                df_f[["FYQuarter", "Date"]]
+                .drop_duplicates()
+                .sort_values("Date")
+            )["FYQuarter"].unique().tolist()
 
-    quarter_opts = (
-        df_f[["FYQuarter", "Date"]]
-        .drop_duplicates()
-        .sort_values("Date")
-    )["FYQuarter"].unique().tolist()
+            quarter_display = ["Select All"] + quarter_opts
 
-    quarter_display = ["Select All"] + quarter_opts
+            selected_quarters = st.multiselect(
+                "Quarter (Financial Year)",
+                quarter_display,
+                default=["Select All"]
+            )
 
-    selected_quarters = st.sidebar.multiselect(
-        "Quarter (Financial Year)",
-        quarter_display,
-        default=["Select All"]
-    )
+            if "Select All" in selected_quarters:
+                quarters = quarter_opts
+            else:
+                quarters = selected_quarters
 
-    if "Select All" in selected_quarters:
-        quarters = quarter_opts
-    else:
-        quarters = selected_quarters
+        df_f = df_f[df_f["FYQuarter"].isin(quarters)]
 
-    df_f = df_f[df_f["FYQuarter"].isin(quarters)]
+        # ---- MONTH (DEFAULT = ALL) ----
+        with frow2_c3:
+            month_opts = (
+                df_f[["Month", "MonthNum"]]
+                .drop_duplicates()
+                .sort_values("MonthNum")
+            )["Month"].tolist()
 
-    # =====================================================
-    # MONTH FILTER (DEFAULT = ALL)
-    # =====================================================
+            month_display = ["Select All"] + month_opts
 
-    month_opts = (
-        df_f[["Month", "MonthNum"]]
-        .drop_duplicates()
-        .sort_values("MonthNum")
-    )["Month"].tolist()
+            selected_months = st.multiselect(
+                "Month",
+                month_display,
+                default=["Select All"]
+            )
 
-    month_display = ["Select All"] + month_opts
+            if "Select All" in selected_months:
+                months = month_opts
+            else:
+                months = selected_months
 
-    selected_months = st.sidebar.multiselect(
-        "Month",
-        month_display,
-        default=["Select All"]
-    )
+        df_f = df_f[df_f["Month"].isin(months)]
 
-    if "Select All" in selected_months:
-        months = month_opts
-    else:
-        months = selected_months
+        # ---- BRAND ----
+        brands_available = sorted(df_f["Brand"].unique())
 
-    df_f = df_f[df_f["Month"].isin(months)]
+        if "brands" not in st.session_state:
+            if GO_DESI in brands_available:
+                st.session_state.brands = [GO_DESI]
+            else:
+                st.session_state.brands = brands_available[:1]
 
-    # =====================================================
-    # BRAND
-    # =====================================================
-    brands_available = sorted(df_f["Brand"].unique())
+        st.session_state.brands = [b for b in st.session_state.brands if b in brands_available]
 
-    if "brands" not in st.session_state:
-        if GO_DESI in brands_available:
-            st.session_state.brands = [GO_DESI]
-        else:
-            st.session_state.brands = brands_available[:1]
+        brands = st.multiselect(
+            "Brand",
+            brands_available,
+            key="brands"
+        )
 
-    st.session_state.brands = [b for b in st.session_state.brands if b in brands_available]
+        df_plot = df_f[df_f["Brand"].isin(brands)]
 
-    brands = st.sidebar.multiselect(
-        "Brand",
-        brands_available,
-        key="brands"
-    )
+        # ---- METRICS ----
+        st.divider()
 
-    df_plot = df_f[df_f["Brand"].isin(brands)]
+        metric_keys = list(METRICS.keys())
 
-    # =====================================================
-    # METRICS
-    # =====================================================
-    st.sidebar.markdown("---")
+        mcol1, mcol2 = st.columns(2)
 
-    metric_keys = list(METRICS.keys())
+        with mcol1:
+            m1 = st.selectbox(
+                "Compare Metric (Solid)",
+                metric_keys,
+                index=metric_keys.index("Est. Category Share")
+            )
 
-    m1 = st.sidebar.selectbox(
-        "Compare Metric (Solid)",
-        metric_keys,
-        index=metric_keys.index("Est. Category Share")
-    )
+        m2_options = [m for m in metric_keys if m != m1]
 
-    m2_options = [m for m in metric_keys if m != m1]
+        default_m2 = "Overall SOV" if "Overall SOV" in m2_options else m2_options[0]
 
-    default_m2 = "Overall SOV" if "Overall SOV" in m2_options else m2_options[0]
+        with mcol2:
+            m2 = st.selectbox(
+                "Baseline Metric (Dashed)",
+                m2_options,
+                index=m2_options.index(default_m2)
+            )
 
-    m2 = st.sidebar.selectbox(
-        "Baseline Metric (Dashed)",
-        m2_options,
-        index=m2_options.index(default_m2)
-    )
-
-    col1 = METRICS[m1]
-    col2 = METRICS[m2]
+        col1 = METRICS[m1]
+        col2 = METRICS[m2]
 
     # =====================================================
     # CHART
@@ -382,74 +398,117 @@ with tab1:
 
 
 # =====================================================
-# ====================== TAB 2 =========================
+# ==================== BLINKIT TAB =====================
 # =====================================================
-with tab2:
+with tab_blinkit:
     st.title("Blinkit Volume Share")
 
     df = load_blinkit().copy()
 
     # =========================
-    # FILTERS
+    # SPLIT OUT BRANDED ROLLUP TOTALS
+    # These 4 rows are pre-summed totals in BlinkitVS.xlsx and must
+    # not appear in the normal filters/chart. Match by keyword name
+    # (case-insensitive), never by row position.
     # =========================
-    st.markdown("### Filters")
+    _kw_norm = df["Keyword"].astype(str).str.strip().str.lower()
+    _is_rollup = _kw_norm.isin(BLINKIT_ROLLUP_NAMES_LOWER)
 
-    col1, col2 = st.columns(2)
+    df_rollups = df[_is_rollup].copy()
+    df = df[~_is_rollup].copy()
 
-    # CATEGORY
-    with col1:
-        category = st.multiselect(
-            "Category",
-            sorted(df["Category"].unique()),
-            default=["Indian Sweets"]
-        )
+    # =========================
+    # SEED DEFAULT FILTER STATE — ONCE PER SESSION (DoD dashboard).
+    # Seed via the widgets' session_state keys (not default=) behind a
+    # flag, so later reruns keep whatever the user has since selected —
+    # including a deliberately cleared filter — instead of snapping back.
+    #   Category = Indian Sweets, Keyword Type = Competition,
+    #   Keyword = empty (empty => all keywords matching Category+Type).
+    # =========================
+    if "blinkit_filters_seeded" not in st.session_state:
+        st.session_state["blinkit_category"] = ["Indian Sweets"]
+        st.session_state["blinkit_ktype"] = ["Competition"]
+        st.session_state["blinkit_keyword"] = []
+        st.session_state["blinkit_filters_seeded"] = True
 
-    # KEYWORD TYPE
-    with col2:
-        keyword_type_opts = sorted(df["Keyword Type"].unique())
-        keyword_type_display = ["All"] + keyword_type_opts
+    # =========================
+    # FILTERS (inline at the TOP, in an expander — consistent with the
+    # SOV tab. Kept above the charts so changing a filter doesn't cause
+    # the tall charts to re-render above the control and jump the page.
+    # Widgets, defaults, and order of application are unchanged.
+    # =========================
+    with st.expander("Filters", expanded=True):
 
-        selected_keyword_type = st.multiselect(
-            "Keyword Type",
-            keyword_type_display,
-            default=["All"]
-        )
+        col1, col2 = st.columns(2)
 
-        if "All" in selected_keyword_type:
-            keyword_type = keyword_type_opts
-        else:
-            keyword_type = selected_keyword_type
+        # CATEGORY  (default seeded via session_state key)
+        with col1:
+            category = st.multiselect(
+                "Category",
+                sorted(df["Category"].unique()),
+                key="blinkit_category",
+            )
 
-    df = df[df["Category"].isin(category)]
-    df = df[df["Keyword Type"].isin(keyword_type)]
+        # KEYWORD TYPE  (default seeded via session_state key)
+        with col2:
+            keyword_type_opts = sorted(df["Keyword Type"].unique())
+            keyword_type_display = ["All"] + keyword_type_opts
 
-    col3, col4 = st.columns(2)
+            selected_keyword_type = st.multiselect(
+                "Keyword Type",
+                keyword_type_display,
+                key="blinkit_ktype",
+            )
 
-    # KEYWORD
-    with col3:
-        keyword_opts = sorted(df["Keyword"].unique())
+            if "All" in selected_keyword_type:
+                keyword_type = keyword_type_opts
+            else:
+                keyword_type = selected_keyword_type
 
-        keywords = st.multiselect(
-            "Keyword",
-            keyword_opts,
-            default=["GO DESi"] if "GO DESi" in keyword_opts else keyword_opts[:1]
-        )
+        df = df[df["Category"].isin(category)]
+        df = df[df["Keyword Type"].isin(keyword_type)]
 
-    # WEEK
-    with col4:
-        week_cols = [c for c in df.columns if "W" in c]
-        week_display = ["All"] + week_cols
+        col3, col4 = st.columns(2)
 
-        selected_weeks = st.multiselect(
-            "Week",
-            week_display,
-            default=["All"]
-        )
+        # KEYWORD  (default seeded empty; empty => all matching keywords)
+        with col3:
+            keyword_opts = sorted(df["Keyword"].unique())
 
-        if "All" in selected_weeks:
-            selected_weeks = week_cols
+            selected_keywords = st.multiselect(
+                "Keyword",
+                keyword_opts,
+                key="blinkit_keyword",
+            )
 
-    df = df[df["Keyword"].isin(keywords)]
+            # Empty selection means "all keywords matching Category +
+            # Keyword Type" — so the growth table and All-Keywords chart
+            # open on the full set, not a single keyword.
+            keywords = selected_keywords if selected_keywords else keyword_opts
+
+        # WEEK  (unchanged default = All)
+        with col4:
+            week_cols = [c for c in df.columns if "W" in c]
+            week_display = ["All"] + week_cols
+
+            selected_weeks = st.multiselect(
+                "Week",
+                week_display,
+                default=["All"],
+                key="blinkit_week",
+            )
+
+            if "All" in selected_weeks:
+                selected_weeks = week_cols
+
+        df = df[df["Keyword"].isin(keywords)]
+
+    # Reserve slots BELOW the filters, filled at the end of this block
+    # so they can reuse week_sort() and the finalized filtered frame.
+    # Order = creation order:
+    #   1) Growth / de-growth table   2) Branded Summary chart
+    # both ABOVE the All-Keywords chart.
+    growth_container = st.container()
+    summary_container = st.container()
 
     # =========================
     # TRANSFORM
@@ -533,3 +592,207 @@ with tab2:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # =========================
+    # BRANDED SUMMARY KEYWORDS (unfiltered — 4 rollup rows only)
+    # Rendered in the slot reserved above, so it appears ABOVE the
+    # All-Keywords chart. Uses df_rollups directly (never the filtered
+    # frame) and reuses week_sort() + the same melt→clean→sort pipeline.
+    # =========================
+    with summary_container:
+        st.subheader("Branded Summary Keywords")
+        st.caption(
+            "**Note:** this graph is not affected by any of the filters. "
+            "The **All Keywords** graph below it is."
+        )
+
+        if df_rollups.empty:
+            st.info("None of the branded summary keywords are in the sheet.")
+        else:
+            # Plot ALL week columns in the file (ignore the Week filter)
+            rollup_week_cols = [c for c in df_rollups.columns if "W" in c]
+
+            rollup_melt = df_rollups.melt(
+                id_vars=["Category", "Keyword Type", "Keyword"],
+                value_vars=rollup_week_cols,
+                var_name="Week",
+                value_name="Searches"
+            )
+
+            # ---- CLEAN NUMBERS (same as existing chart) ----
+            rollup_melt["Searches"] = (
+                rollup_melt["Searches"]
+                .astype(str)
+                .str.replace(",", "", regex=False)
+                .replace("-", None)
+            )
+
+            rollup_melt["Searches"] = pd.to_numeric(
+                rollup_melt["Searches"], errors="coerce"
+            )
+
+            # ---- SORT WEEKS (reuse existing week_sort) ----
+            rollup_melt["sort_key"] = rollup_melt["Week"].apply(week_sort)
+            rollup_melt = rollup_melt.sort_values("sort_key")
+
+            fig_rollup = go.Figure()
+
+            for k in df_rollups["Keyword"].tolist():
+                d = rollup_melt[rollup_melt["Keyword"] == k].copy()
+
+                d = d.dropna(subset=["Searches"])
+
+                fig_rollup.add_trace(go.Scatter(
+                    x=d["Week"],
+                    y=d["Searches"],
+                    mode="lines+markers+text",
+                    text=[
+                        f"{int(v):,}" if pd.notna(v) else ""
+                        for v in d["Searches"]
+                    ],
+                    textposition="top center",
+                    name=k,
+                    line=dict(width=3)
+                ))
+
+            # enforce correct x order
+            x_order = rollup_melt["Week"].drop_duplicates().tolist()
+
+            fig_rollup.update_layout(
+                height=600,
+                yaxis_title="Search Volume",
+                xaxis_title="Week",
+                xaxis=dict(categoryorder="array", categoryarray=x_order),
+                legend=dict(orientation="h", y=-0.2),
+            )
+
+            st.plotly_chart(fig_rollup, use_container_width=True)
+
+            st.caption(f"{len(df_rollups)} keywords plotted, one colour each.")
+
+    # =========================
+    # GROWTH / DE-GROWTH TABLE (last two weeks)
+    # Rendered in the slot reserved at the top, so it sits ABOVE the
+    # Branded Summary chart. Respects the Category / Keyword Type /
+    # Keyword filters (uses the filtered non-rollup `df`) but IGNORES
+    # the Week multiselect — it always compares the two most recent
+    # week columns, ordered chronologically via week_sort().
+    # =========================
+    with growth_container:
+        st.subheader("Growth / de-growth")
+
+        growth_week_cols = sorted(
+            [c for c in df.columns if "W" in c], key=week_sort
+        )
+
+        if len(growth_week_cols) < 2:
+            st.info("Need at least two weeks of data to compare.")
+        else:
+            prev_week = growth_week_cols[-2]
+            latest_week = growth_week_cols[-1]
+
+            def _clean_week(col):
+                return pd.to_numeric(
+                    col.astype(str).str.replace(",", "", regex=False).replace("-", None),
+                    errors="coerce",
+                )
+
+            prev_num = _clean_week(df[prev_week])
+            latest_num = _clean_week(df[latest_week])
+
+            prev_z = prev_num.fillna(0)
+            latest_z = latest_num.fillna(0)
+
+            # Drop rows where both weeks are NaN/0 (nothing to say)
+            keep = ~((prev_z == 0) & (latest_z == 0))
+
+            abs_change = latest_z - prev_z
+
+            # Change % as a NUMBER: growth vs prev; inf ("New") when
+            # prev is 0/NaN but latest > 0; NaN when both effectively 0.
+            chg = pd.Series(np.nan, index=df.index, dtype="float64")
+            pos = prev_z > 0
+            chg[pos] = (latest_z[pos] - prev_z[pos]) / prev_z[pos] * 100
+            chg[(prev_z == 0) & (latest_z > 0)] = np.inf
+
+            prev_label = f"Prev ({prev_week})"
+            latest_label = f"Latest ({latest_week})"
+
+            table = pd.DataFrame({
+                "Category": df["Category"],
+                "Keyword Type": df["Keyword Type"],
+                "Keyword": df["Keyword"],
+                prev_label: prev_num,
+                latest_label: latest_num,
+                "Absolute Change": abs_change,
+                "Change %": chg,
+            })[keep]
+
+            table = (
+                table
+                .sort_values("Change %", ascending=False, na_position="last")
+                .reset_index(drop=True)
+            )
+
+            n = len(table)
+
+            if n == 0:
+                st.info("No rows to compare for the current filters.")
+            else:
+                up = int((table["Change %"] > 0).sum())
+                down = int((table["Change %"] < 0).sum())
+
+                st.caption(
+                    f"{n} keywords, {prev_week} to {latest_week} — "
+                    f"{up} up, {down} down. Sorted by Change % descending; "
+                    "click any column header to re-sort."
+                )
+
+                # Scale shading intensity to magnitude vs the 90th
+                # percentile of finite absolute moves this week.
+                finite_moves = (
+                    table["Change %"]
+                    .replace([np.inf, -np.inf], np.nan)
+                    .dropna()
+                    .abs()
+                )
+                p90 = float(np.percentile(finite_moves, 90)) if len(finite_moves) else 0.0
+
+                def _shade(row):
+                    v = row["Change %"]
+                    if pd.isna(v):
+                        return [""] * len(row)
+                    if np.isinf(v):  # "New" — distinct colour
+                        return ["background-color: rgba(37, 99, 235, 0.28)"] * len(row)
+                    if v == 0:
+                        return [""] * len(row)
+                    mag = min(1.0, abs(v) / p90) if p90 > 0 else 1.0
+                    alpha = 0.10 + 0.35 * mag
+                    rgb = "22, 163, 74" if v > 0 else "220, 38, 38"
+                    return [f"background-color: rgba({rgb}, {alpha:.3f})"] * len(row)
+
+                def _fmt_int(v):
+                    return "—" if pd.isna(v) else f"{v:,.0f}"
+
+                def _fmt_signed(v):
+                    return "—" if pd.isna(v) else f"{v:+,.0f}"
+
+                def _fmt_pct(v):
+                    if pd.isna(v):
+                        return "—"
+                    if np.isinf(v):
+                        return "New"
+                    return f"{v:.1f}%"
+
+                styler = (
+                    table.style
+                    .apply(_shade, axis=1)
+                    .format({
+                        prev_label: _fmt_int,
+                        latest_label: _fmt_int,
+                        "Absolute Change": _fmt_signed,
+                        "Change %": _fmt_pct,
+                    })
+                )
+
+                st.dataframe(styler, use_container_width=True, hide_index=True)
