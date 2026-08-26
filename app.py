@@ -115,8 +115,12 @@ def build_color_map(brands):
 
 # =====================================================
 # BLINKIT BRANDED ROLLUPS
-# Pre-summed total rows in BlinkitVS.xlsx — excluded from the
-# normal per-keyword filters/chart so they don't pollute controls.
+# Pre-summed total rows in BlinkitVS.xlsx. All 4 feed the Branded
+# Summary chart. Only the 3 per-category sums are excluded from the
+# working frame (they'd pollute the real Candies/Sweets/Snacks
+# categories); the "GO DESi" brand-total row has its own unique
+# "GO DESi" category, so it is KEPT in the working frame and surfaced
+# as a selectable category too.
 # =====================================================
 BLINKIT_ROLLUPS = [
     "GO DESi Candies/POPz Branded Keywords",
@@ -125,6 +129,12 @@ BLINKIT_ROLLUPS = [
     "GO DESi",
 ]
 BLINKIT_ROLLUP_NAMES_LOWER = {r.strip().lower() for r in BLINKIT_ROLLUPS}
+
+# Rows removed from the working (per-keyword) frame: the 3 per-category
+# sums only — NOT the "GO DESi" brand total.
+BLINKIT_MAIN_EXCLUDE_LOWER = {
+    r.strip().lower() for r in BLINKIT_ROLLUPS if r.strip().lower() != "go desi"
+}
 
 
 # =====================================================
@@ -407,27 +417,30 @@ with tab_blinkit:
 
     # =========================
     # SPLIT OUT BRANDED ROLLUP TOTALS
-    # These 4 rows are pre-summed totals in BlinkitVS.xlsx and must
-    # not appear in the normal filters/chart. Match by keyword name
-    # (case-insensitive), never by row position.
+    # Match by keyword name (case-insensitive), never by row position.
+    #  - df_rollups: all 4 pre-summed totals -> Branded Summary chart.
+    #  - working df: excludes only the 3 per-category sums; the "GO DESi"
+    #    brand-total row is KEPT so it appears as its own Category.
     # =========================
     _kw_norm = df["Keyword"].astype(str).str.strip().str.lower()
     _is_rollup = _kw_norm.isin(BLINKIT_ROLLUP_NAMES_LOWER)
+    _is_main_excluded = _kw_norm.isin(BLINKIT_MAIN_EXCLUDE_LOWER)
 
     df_rollups = df[_is_rollup].copy()
-    df = df[~_is_rollup].copy()
+    df = df[~_is_main_excluded].copy()
 
     # =========================
     # SEED DEFAULT FILTER STATE — ONCE PER SESSION (DoD dashboard).
     # Seed via the widgets' session_state keys (not default=) behind a
     # flag, so later reruns keep whatever the user has since selected —
     # including a deliberately cleared filter — instead of snapping back.
-    #   Category = Indian Sweets, Keyword Type = Competition,
+    #   Category = Indian Sweets + GO DESi, Keyword Type = Competition
+    #   + Branded (Branded so the GO DESi brand-total is visible on load),
     #   Keyword = empty (empty => all keywords matching Category+Type).
     # =========================
     if "blinkit_filters_seeded" not in st.session_state:
-        st.session_state["blinkit_category"] = ["Indian Sweets"]
-        st.session_state["blinkit_ktype"] = ["Competition"]
+        st.session_state["blinkit_category"] = ["Indian Sweets", "GO DESi"]
+        st.session_state["blinkit_ktype"] = ["Competition", "Branded"]
         st.session_state["blinkit_keyword"] = []
         st.session_state["blinkit_filters_seeded"] = True
 
