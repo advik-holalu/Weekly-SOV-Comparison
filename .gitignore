@@ -9,8 +9,11 @@ __pycache__/
 .venv/
 env/
 
-# Streamlit cache
-.streamlit/
+# Streamlit secrets (real file untracked; .example IS committed)
+.streamlit/secrets.toml
+
+# Service-account / credential files
+*.json
 
 # Raw input files (never push)
 data_raw/*

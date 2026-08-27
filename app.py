@@ -17,6 +17,9 @@ DATA = ROOT / "data_agg" / "sov_weekly.parquet"
 GO_DESI = "Go Desi"
 GO_DESI_COLOR = "#F05A28"
 
+# Google Sheets read-only scope for the Blinkit WoW sheet.
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
 # =====================================================
 # LOAD PARQUET (CLOUD SAFE)
 # =====================================================
@@ -74,11 +77,54 @@ def load_data():
 
     return df
 
-@st.cache_data(show_spinner=False)
-def load_blinkit():
-    path = ROOT / "data_raw" / "BlinkitVS.xlsx"
-    df = pd.read_excel(path, engine="openpyxl")
-    df.columns = df.columns.str.strip()
+@st.cache_data(ttl=60, show_spinner="Reading the Blinkit WoW sheet...")
+def load_blinkit(_bust: float = 0.0) -> pd.DataFrame:
+    """Read the Blinkit "WoW" tab from Google Sheets using the same
+    service-account auth as the DoD dashboard. Returns a DataFrame with
+    the SAME shape/columns as the old Excel reader: Category, Keyword
+    Type, Keyword, then one column per week exactly as headed in the
+    sheet (e.g. "Jan26 W1"). Week columns are returned uncoerced — the
+    chart cleans them (strip commas, coerce numeric) at melt time.
+    """
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    creds = Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]), scopes=SCOPES
+    )
+    worksheet = (
+        gspread.authorize(creds)
+        .open_by_key(st.secrets["sheet"]["id"])
+        .worksheet(st.secrets["sheet"].get("worksheet", "WoW"))
+    )
+    rows = worksheet.get_values(value_render_option="UNFORMATTED_VALUE")
+
+    if not rows:
+        return pd.DataFrame(columns=["Category", "Keyword Type", "Keyword"])
+
+    # rows[0] = header, rows[1:] = body. Header cells stripped to strings;
+    # week headers stay exactly as the sheet heads them (e.g. "Jan26 W1").
+    header = [str(h).strip() for h in rows[0]]
+
+    # Sheets truncates trailing blanks, so rows are ragged. Pad header and
+    # every body row to a common width -> short rows read as blanks, never
+    # IndexError.
+    width = max([len(header)] + [len(r) for r in rows[1:]])
+    header = header + [""] * (width - len(header))
+    body = [list(r) + [""] * (width - len(r)) for r in rows[1:]]
+
+    df = pd.DataFrame(body, columns=header)
+
+    # Category / Keyword Type / Keyword as stripped strings. Week columns
+    # are left as-is (matching what pd.read_excel used to hand over).
+    for c in ["Category", "Keyword Type", "Keyword"]:
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.strip()
+
+    # Drop rows with an empty Keyword.
+    if "Keyword" in df.columns:
+        df = df[df["Keyword"].str.strip() != ""]
+
     return df
 
 df = load_data()
@@ -413,7 +459,15 @@ with tab_sov:
 with tab_blinkit:
     st.title("Blinkit Volume Share")
 
-    df = load_blinkit().copy()
+    try:
+        df = load_blinkit().copy()
+    except Exception as e:
+        st.error(
+            "Couldn't reach the WoW Google Sheet. Check `.streamlit/secrets.toml` "
+            "and make sure the service account has Viewer access to the spreadsheet."
+        )
+        st.caption(f"{type(e).__name__}: {e}")
+        st.stop()
 
     # =========================
     # SPLIT OUT BRANDED ROLLUP TOTALS
